@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
+	"github.com/gophercloud/utils/v2/openstack/clientconfig"
 	"k8s.io/apimachinery/pkg/util/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -72,4 +73,7 @@ func NewWithLogger(scope Scope, logger logr.Logger) *WithLogger {
 
 func (s *WithLogger) Logger() logr.Logger {
 	return s.logger
+}
+func (s *WithLogger) GetCloudFromSecret(ctx context.Context, ctrlClient client.Client, secretNamespace string, secretName string, cloudName string) (clientconfig.Cloud, []byte, error) {
+	return getCloudFromSecret(ctx, ctrlClient, secretNamespace, secretName, cloudName)
 }

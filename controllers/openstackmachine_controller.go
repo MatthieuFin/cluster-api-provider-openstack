@@ -421,8 +421,16 @@ func (r *OpenStackMachineReconciler) reconcileMachineState(scope *scope.WithLogg
 		scope.Logger().Info("Machine instance state is ACTIVE", "id", openStackServer.Status.InstanceID)
 		conditions.MarkTrue(openStackMachine, infrav1.InstanceReadyCondition)
 
+		//openStackMachine.Spec.IdentityRef.Name
+		//openStackMachine.Spec.IdentityRef.CloudName
+		cloud, _, err := scope.GetCloudFromSecret(context.Background(), r.Client, openStackMachine.Namespace, openStackMachine.Spec.IdentityRef.Name, openStackMachine.Spec.IdentityRef.CloudName)
+		if err != nil {
+
+		}
+		//getCloudFromSecret()
+
 		// Set properties required by CAPI machine controller
-		openStackMachine.Spec.ProviderID = ptr.To(fmt.Sprintf("openstack:///%s", *openStackServer.Status.InstanceID))
+		openStackMachine.Spec.ProviderID = ptr.To(fmt.Sprintf("openstack://%s/%s", cloud.RegionName, *openStackServer.Status.InstanceID))
 		openStackMachine.Status.InstanceID = openStackServer.Status.InstanceID
 		openStackMachine.Status.Ready = true
 	case infrav1.InstanceStateError:
