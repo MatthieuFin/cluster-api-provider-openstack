@@ -645,7 +645,11 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		conditions.MarkTrue(openStackMachine, infrav1.InstanceReadyCondition)
 
 		// Set properties required by CAPI machine controller
-		openStackMachine.Spec.ProviderID = ptr.To(fmt.Sprintf("openstack:///%s", instanceStatus.ID()))
+		//openStackMachine.Spec.ProviderID = ptr.To(fmt.Sprintf("openstack:///%s", instanceStatus.ID()))
+		cloud, _, err := scope.GetCloudFromSecret(context.Background(), r.Client, openStackMachine.Namespace, openStackMachine.Spec.IdentityRef.Name, openStackMachine.Spec.IdentityRef.CloudName)
+		if err != nil {
+		}
+		openStackMachine.Spec.ProviderID = ptr.To(fmt.Sprintf("openstack://%s/%s", cloud.RegionName, instanceStatus.ID()))
 		openStackMachine.Status.Ready = true
 	case infrav1.InstanceStateError:
 		// If the machine has a NodeRef then it must have been working at some point,
