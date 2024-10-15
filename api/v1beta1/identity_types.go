@@ -28,6 +28,12 @@ type OpenStackIdentityReference struct {
 	// CloudName specifies the name of the entry in the clouds.yaml file to use.
 	// +kubebuilder:validation:Required
 	CloudName string `json:"cloudName"`
+
+	// ProviderIDRegion specifies the name of the region to specify in providerID field format `openstack://ProviderIDRegion/instance_uuid`.
+	// This option permit to been compatible with multiple OCCM (one per OS cluster).
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
+	// +optional
+	ProviderIDRegion string `json:"providerIDRegion,omitempty"`
 }
 
 // IdentityRefProvider is an interface for obtaining OpenStack credentials from an API object
