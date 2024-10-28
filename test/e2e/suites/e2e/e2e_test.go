@@ -679,6 +679,108 @@ var _ = Describe("e2e tests [PR-Blocking]", func() {
 		})
 	})
 
+	Describe("Workload cluster providerID identityRef.Region field per OpenStackMachineTemplate override OpenStackCluster identityRef.Region field", func() {
+		It("should create machines with identityRef.Region field which override CLuster one", func(ctx context.Context) {
+			shared.Logf("Creating a cluster")
+			clusterName := fmt.Sprintf("cluster-%s", namespace.Name)
+			configCluster := defaultConfigCluster(clusterName, namespace.Name)
+			configCluster.ControlPlaneMachineCount = ptr.To(int64(1))
+			configCluster.WorkerMachineCount = ptr.To(int64(0))
+			configCluster.Flavor = shared.FlavorProviderIDWithRegionOverride
+			createCluster(ctx, configCluster, clusterResources)
+			md := clusterResources.MachineDeployments
+
+			workerMachines := framework.GetMachinesByMachineDeployments(ctx, framework.GetMachinesByMachineDeploymentsInput{
+				Lister:            e2eCtx.Environment.BootstrapClusterProxy.GetClient(),
+				ClusterName:       clusterName,
+				Namespace:         namespace.Name,
+				MachineDeployment: *md[0],
+			})
+			controlPlaneMachines := framework.GetControlPlaneMachinesByCluster(ctx, framework.GetControlPlaneMachinesByClusterInput{
+				Lister:      e2eCtx.Environment.BootstrapClusterProxy.GetClient(),
+				ClusterName: clusterName,
+				Namespace:   namespace.Name,
+			})
+			Expect(workerMachines).To(HaveLen(0))
+			Expect(controlPlaneMachines).To(HaveLen(1))
+
+			shared.Logf("Creating MachineDeployment with identityRef Region field defined")
+			testSecurityGroupName := "testSecGroup"
+			// create required test security group
+			var securityGroupCleanup func(ctx context.Context)
+			securityGroupCleanup, err = shared.CreateOpenStackSecurityGroup(ctx, e2eCtx, testSecurityGroupName, "Test security group")
+			Expect(err).To(BeNil())
+			postClusterCleanup = append(postClusterCleanup, securityGroupCleanup)
+
+			_, clientOpts, _, err := shared.GetTenantProviderClient(e2eCtx)
+			Expect(err).To(BeNil(), "Cannot create providerClient")
+
+			controlPlaneMachine := controlPlaneMachines[0]
+
+			shared.Logf("Fetching serverID control plane")
+			allControlPlaneServers, err := shared.DumpOpenStackServers(e2eCtx, servers.ListOpts{Name: controlPlaneMachine.Name})
+			Expect(err).To(BeNil())
+			Expect(allControlPlaneServers).To(HaveLen(1))
+			controlPlaneServerID := allControlPlaneServers[0].ID
+			Expect(err).To(BeNil())
+
+			Expect(*(controlPlaneMachine.Spec.ProviderID)).To(
+				Equal(fmt.Sprintf("openstack://%s/%s", clientOpts.RegionName, controlPlaneServerID)),
+				fmt.Sprintf("ControlPlane machine should have providerID string `openstack://%s/uuid`", clientOpts.RegionName))
+		})
+	})
+
+	Describe("Workload cluster providerID identityRef.Region field herited from OpenStackCluster identityRef.Region field", func() {
+		It("should create machines without identityRef.Region field and herit from Cluster object", func(ctx context.Context) {
+			shared.Logf("Creating a cluster")
+			clusterName := fmt.Sprintf("cluster-%s", namespace.Name)
+			configCluster := defaultConfigCluster(clusterName, namespace.Name)
+			configCluster.ControlPlaneMachineCount = ptr.To(int64(1))
+			configCluster.WorkerMachineCount = ptr.To(int64(0))
+			configCluster.Flavor = shared.FlavorProviderIDWithRegionDefault
+			createCluster(ctx, configCluster, clusterResources)
+			md := clusterResources.MachineDeployments
+
+			workerMachines := framework.GetMachinesByMachineDeployments(ctx, framework.GetMachinesByMachineDeploymentsInput{
+				Lister:            e2eCtx.Environment.BootstrapClusterProxy.GetClient(),
+				ClusterName:       clusterName,
+				Namespace:         namespace.Name,
+				MachineDeployment: *md[0],
+			})
+			controlPlaneMachines := framework.GetControlPlaneMachinesByCluster(ctx, framework.GetControlPlaneMachinesByClusterInput{
+				Lister:      e2eCtx.Environment.BootstrapClusterProxy.GetClient(),
+				ClusterName: clusterName,
+				Namespace:   namespace.Name,
+			})
+			Expect(workerMachines).To(HaveLen(0))
+			Expect(controlPlaneMachines).To(HaveLen(1))
+
+			shared.Logf("Creating MachineDeployment with identityRef Region field defined")
+			testSecurityGroupName := "testSecGroup"
+			// create required test security group
+			var securityGroupCleanup func(ctx context.Context)
+			securityGroupCleanup, err = shared.CreateOpenStackSecurityGroup(ctx, e2eCtx, testSecurityGroupName, "Test security group")
+			Expect(err).To(BeNil())
+			postClusterCleanup = append(postClusterCleanup, securityGroupCleanup)
+
+			_, clientOpts, _, err := shared.GetTenantProviderClient(e2eCtx)
+			Expect(err).To(BeNil(), "Cannot create providerClient")
+
+			controlPlaneMachine := controlPlaneMachines[0]
+
+			shared.Logf("Fetching serverID control plane")
+			allControlPlaneServers, err := shared.DumpOpenStackServers(e2eCtx, servers.ListOpts{Name: controlPlaneMachine.Name})
+			Expect(err).To(BeNil())
+			Expect(allControlPlaneServers).To(HaveLen(1))
+			controlPlaneServerID := allControlPlaneServers[0].ID
+			Expect(err).To(BeNil())
+
+			Expect(*(controlPlaneMachine.Spec.ProviderID)).To(
+				Equal(fmt.Sprintf("openstack://%s/%s", clientOpts.RegionName, controlPlaneServerID)),
+				fmt.Sprintf("ControlPlane machine should have providerID string `openstack://%s/uuid`", clientOpts.RegionName))
+		})
+	})
+
 	Describe("Workload cluster (multiple attached networks)", func() {
 		var (
 			clusterName   string
@@ -1035,9 +1137,11 @@ func getInstanceIDForMachine(machine *clusterv1.Machine) string {
 	providerID := machine.Spec.ProviderID
 	Expect(providerID).NotTo(BeNil())
 
-	providerIDSplit := strings.SplitN(*providerID, ":///", 2)
+	providerIDSplit := strings.SplitN(*providerID, "://", 2)
 	Expect(providerIDSplit[0]).To(Equal("openstack"))
-	return providerIDSplit[1]
+	providerIDPathSplit := strings.SplitN(providerIDSplit[1], "/", 2)
+	// providerIDPathSplit[0] contain region name, could be empty
+	return providerIDPathSplit[1]
 }
 
 func isErrorEventExists(namespace, machineDeploymentName, eventReason, errorMsg string, eList *corev1.EventList) bool {
