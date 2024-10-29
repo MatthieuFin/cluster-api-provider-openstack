@@ -391,9 +391,13 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		Address: instanceStatus.Name(),
 	})
 	openStackMachine.Status.Addresses = addresses
-	if openStackMachine.Spec.IdentityRef == nil {
-		openStackMachine.Spec.IdentityRef = &openStackCluster.Spec.IdentityRef
+
+	// Retreive openStackServer object to set openStackMachine IdentityRef field with inherit feature from cluster object.
+	server, err := r.getOrCreateMachineServer(ctx, openStackCluster, openStackMachine, machine)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("Failed to get or create OpenStackServer: %w", err)
 	}
+	openStackMachine.Spec.IdentityRef = &server.Spec.IdentityRef
 
 	result := r.reconcileMachineState(scope, openStackMachine, machine, machineServer)
 	if result != nil {
